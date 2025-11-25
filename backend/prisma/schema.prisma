@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users                 User[]
+  imports               Import[]
+  importMappings        ImportMapping[]
+  leads                 Lead[]
+  suppressionList       SuppressionList[]
+
+  @@map("tenants")
+}
+
+model Role {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users              User[]
+  permissions        RoleHasPermission[]
+
+  @@index([name])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles       RoleHasPermission[]
+
+  @@index([name])
+  @@map("permissions")
+}
+
+model RoleHasPermission {
+  id           String @id @default(uuid())
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@index([roleId])
+  @@index([permissionId])
+  @@unique([roleId, permissionId])
+  @@map("role_has_permissions")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  tenantId  String
+  roleId    String
+  name      String?
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant         Tenant               @relation(fields: [tenantId], references: [id])
+  role           Role                 @relation(fields: [roleId], references: [id])
+  sessions       Session[]
+  imports        Import[]
+  importMappings ImportMapping[]
+  activityLogs   ActivityLog[]
+
+  @@index([tenantId])
+  @@index([roleId])
+  @@index([email])
+  @@map("users")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  email     String
+  token     String
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@map("password_resets")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  ipAddress String?
+  userAgent String?
+  lastActive DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([lastActive])
+  @@map("sessions")
+}
+
+model Import {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  userId              String
+  fileName            String
+  filePath            String
+  status              String   @default("pending")
+  totalRecords        Int      @default(0)
+  validRecords        Int      @default(0)
+  duplicateRecords    Int      @default(0)
+  dncMatchedRecords   Int      @default(0)
+  failedRecords       Int      @default(0)
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  leads        Lead[]
+  importErrors ImportError[]
+  dncHits      DncHit[]
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("imports")
+}
+
+model ImportMapping {
+  id           String   @id @default(uuid())
+  tenantId     String
+  userId       String
+  mappingName  String
+  systemField  String
+  fileHeader   String
+  createdAt    DateTime @default(now())
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([mappingName])
+  @@map("import_mappings")
+}
+
+model ImportError {
+  id         String   @id @default(uuid())
+  importId   String
+  rowNumber  Int
+  rawData    Json?
+  errorMessage String
+  createdAt  DateTime @default(now())
+
+  import     Import   @relation(fields: [importId], references: [id])
+
+  @@index([importId])
+  @@map("import_errors")
+}
+
+model Lead {
+  id          String   @id @default(uuid())
+  tenantId    String
+  importId    String
+  phone       String?
+  email       String?
+  firstName   String?
+  lastName    String?
+  dob         DateTime?
+  ficoScore   Int?
+  city        String?
+  state       String?
+  extraData   Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  import      Import   @relation(fields: [importId], references: [id])
+
+  @@index([tenantId])
+  @@index([importId])
+  @@index([phone])
+  @@index([email])
+  @@index([ficoScore])
+  @@index([state])
+  @@map("leads")
+}
+
+model SuppressionList {
+  id        String   @id @default(uuid())
+  tenantId  String
+  phone     String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, phone])
+  @@index([phone])
+  @@map("suppression_list")
+}
+
+model DncMaster {
+  id            String   @id @default(uuid())
+  phone         String   @unique
+  source        String
+  effectiveDate DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([phone])
+  @@index([effectiveDate])
+  @@map("dnc_master")
+}
+
+model DncHit {
+  id              String   @id @default(uuid())
+  importId        String
+  phone           String
+  type            String
+  matchedSourceId String?
+  createdAt       DateTime @default(now())
+
+  import          Import   @relation(fields: [importId], references: [id])
+
+  @@index([importId])
+  @@index([phone])
+  @@index([type])
+  @@map("dnc_hits")
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  userId      String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model Job {
+  id          BigInt   @id
+  queue       String
+  payload     String
+  attempts    Int      @default(0)
+  reservedAt  DateTime?
+  availableAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@map("jobs")
+}
